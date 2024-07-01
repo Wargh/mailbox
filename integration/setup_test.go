@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	dynamodbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/harryzcy/mailbox/internal/env"
 )
 
@@ -28,13 +28,6 @@ func TestMain(m *testing.M) {
 func newLocalClient() *dynamodb.Client {
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(func(_, region string, _ ...interface{}) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				PartitionID:   "aws",
-				URL:           "http://localhost:8000",
-				SigningRegion: region,
-			}, nil
-		})),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
 				AccessKeyID: "dummy", SecretAccessKey: "dummy", SessionToken: "dummy",
@@ -46,7 +39,9 @@ func newLocalClient() *dynamodb.Client {
 		log.Fatal(err)
 	}
 
-	return dynamodb.NewFromConfig(cfg)
+	return dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		o.BaseEndpoint = aws.String("http://localhost:8000")
+	})
 }
 
 func tableExists(d *dynamodb.Client) bool {
@@ -68,45 +63,45 @@ func createTableIfNotExists(d *dynamodb.Client) {
 		return
 	}
 	_, err := d.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
-		AttributeDefinitions: []types.AttributeDefinition{
+		AttributeDefinitions: []dynamodbTypes.AttributeDefinition{
 			{
 				AttributeName: aws.String("MessageID"),
-				AttributeType: types.ScalarAttributeTypeS,
+				AttributeType: dynamodbTypes.ScalarAttributeTypeS,
 			},
 			{
 				AttributeName: aws.String("TypeYearMonth"),
-				AttributeType: types.ScalarAttributeTypeS,
+				AttributeType: dynamodbTypes.ScalarAttributeTypeS,
 			},
 			{
 				AttributeName: aws.String("DateTime"),
-				AttributeType: types.ScalarAttributeTypeS,
+				AttributeType: dynamodbTypes.ScalarAttributeTypeS,
 			},
 			{
 				AttributeName: aws.String("OriginalMessageID"),
-				AttributeType: types.ScalarAttributeTypeS,
+				AttributeType: dynamodbTypes.ScalarAttributeTypeS,
 			},
 		},
-		KeySchema: []types.KeySchemaElement{
+		KeySchema: []dynamodbTypes.KeySchemaElement{
 			{
 				AttributeName: aws.String("MessageID"),
-				KeyType:       types.KeyTypeHash,
+				KeyType:       dynamodbTypes.KeyTypeHash,
 			},
 		},
-		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+		GlobalSecondaryIndexes: []dynamodbTypes.GlobalSecondaryIndex{
 			{
 				IndexName: aws.String("TimeIndex"),
-				KeySchema: []types.KeySchemaElement{
+				KeySchema: []dynamodbTypes.KeySchemaElement{
 					{
 						AttributeName: aws.String("TypeYearMonth"),
-						KeyType:       types.KeyTypeHash,
+						KeyType:       dynamodbTypes.KeyTypeHash,
 					},
 					{
 						AttributeName: aws.String("DateTime"),
-						KeyType:       types.KeyTypeRange,
+						KeyType:       dynamodbTypes.KeyTypeRange,
 					},
 				},
-				Projection: &types.Projection{
-					ProjectionType: types.ProjectionTypeInclude,
+				Projection: &dynamodbTypes.Projection{
+					ProjectionType: dynamodbTypes.ProjectionTypeInclude,
 					NonKeyAttributes: []string{
 						"Subject",
 						"From",
@@ -118,19 +113,19 @@ func createTableIfNotExists(d *dynamodb.Client) {
 			},
 			{
 				IndexName: aws.String("OriginalMessageIDIndex"),
-				KeySchema: []types.KeySchemaElement{
+				KeySchema: []dynamodbTypes.KeySchemaElement{
 					{
 						AttributeName: aws.String("OriginalMessageID"),
-						KeyType:       types.KeyTypeHash,
+						KeyType:       dynamodbTypes.KeyTypeHash,
 					},
 				},
-				Projection: &types.Projection{
-					ProjectionType: types.ProjectionTypeKeysOnly,
+				Projection: &dynamodbTypes.Projection{
+					ProjectionType: dynamodbTypes.ProjectionTypeKeysOnly,
 				},
 			},
 		},
 		TableName:   aws.String(env.TableName),
-		BillingMode: types.BillingModePayPerRequest,
+		BillingMode: dynamodbTypes.BillingModePayPerRequest,
 	})
 	if err != nil {
 		log.Fatal("CreateTable failed", err)
@@ -148,7 +143,7 @@ func deleteAllItems() {
 	for _, item := range resp.Items {
 		_, err := client.DeleteItem(context.TODO(), &dynamodb.DeleteItemInput{
 			TableName: aws.String(env.TableName),
-			Key:       map[string]types.AttributeValue{"MessageID": item["MessageID"]},
+			Key:       map[string]dynamodbTypes.AttributeValue{"MessageID": item["MessageID"]},
 		})
 		if err != nil {
 			log.Fatal("DeleteItem failed", err)
